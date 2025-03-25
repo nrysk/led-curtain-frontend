@@ -1,0 +1,5 @@
+pre-commit:
+    commands:
+        check:
+            run: "npx biome check --write --files-ignore-unknown=true --no-errors-on-unmatched {staged_files}"
+            stage_fixed: true
