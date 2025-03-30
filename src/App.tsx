@@ -7,6 +7,7 @@ import {
 	ColorPicker,
 	ColorPickerChannelSlider,
 	Dialog,
+	Drawer,
 	Field,
 	HStack,
 	Heading,
@@ -14,6 +15,7 @@ import {
 	Image,
 	Input,
 	Portal,
+	Progress,
 	SegmentGroup,
 	Textarea,
 	VStack,
@@ -30,7 +32,8 @@ const maxTextLength = 20;
 
 function App() {
 	// 処理の状態
-	const [loading, setLoading] = useState(false);
+	const [sending, setSending] = useState(false);
+	const [sendedCount, setSendedCount] = useState(0);
 	const [generating, setGenerating] = useState(false);
 	// 入力の状態
 	const [ipAddress, setIpAddress] = useIpAddress();
@@ -64,42 +67,76 @@ function App() {
 			return;
 		}
 
-		// キャンバスを Blob に変換
-		setLoading(true);
-		const formData = new FormData();
-		const blob = await canvasToBlob(canvasList[0]);
-		if (!blob) {
-			alert("Blob 変換に失敗しました");
-			setLoading(false);
-			return;
-		}
-
-		// 送信
-		formData.append("file", blob, "image.png");
-		formData.append("count", String(1));
-		fetch(`http://${ipAddress}/contents/${presetId}`, {
-			method: "POST",
-			body: formData,
-		}).then((res) => {
-			if (res.ok) {
+		setSending(true);
+		setSendedCount(0);
+		// canvas 一つずつを Blob に変換して送信
+		for (const i in canvasList) {
+			const blob = await canvasToBlob(canvasList[i]);
+			if (!blob) {
 				toaster.create({
-					title: "送信成功",
-					type: "success",
-				});
-			} else {
-				toaster.create({
-					title: "送信失敗",
+					title: "Blob 変換に失敗しました",
 					type: "error",
-					description: "送信に失敗しました",
 				});
+				setSending(false);
+				return;
 			}
-			setLoading(false);
+			// 送信
+			const formData = new FormData();
+			formData.append("file", blob, `image${i}.png`);
+			formData.append("frames", String(i));
+			await fetch(`http://${ipAddress}/presets/${presetId}/frames`, {
+				method: "POST",
+				body: formData,
+			}).then(() => {
+				// 送信完了カウントを増やす
+				setSendedCount((prev) => prev + 1);
+			});
+
+			// 負荷軽減のためにスリープ
+			await new Promise((resolve) => {
+				setTimeout(() => {
+					resolve(null);
+				}, 100);
+			});
+		}
+		// 総フレーム数を送信
+		await fetch(`http://${ipAddress}/presets/${presetId}`, {
+			method: "POST",
+			body: JSON.stringify({
+				totalFrames: canvasList.length,
+			}),
 		});
+
+		setSending(false);
 	};
 
 	return (
 		<>
+			{/* トースト */}
 			<Toaster />
+
+			{/* プログレスバー用ドロワー */}
+			<Drawer.Root open={sending} placement="bottom">
+				<Portal>
+					<Drawer.Positioner p="2">
+						<Drawer.Content w="full" maxW="500px" mx="auto" p="4" rounded="md">
+							{/* プログレスバー */}
+							<Progress.Root
+								value={(sendedCount / canvasList.length) * 100}
+								w="full"
+							>
+								<HStack>
+									<Progress.Track w="full">
+										<Progress.Range />
+									</Progress.Track>
+									<Progress.ValueText />
+								</HStack>
+							</Progress.Root>
+						</Drawer.Content>
+					</Drawer.Positioner>
+				</Portal>
+			</Drawer.Root>
+
 			{/* ヘッダー */}
 			<Center
 				as="header"
@@ -168,6 +205,7 @@ function App() {
 							setPresetId(e.value);
 						}}
 						w="full"
+						disabled={sending}
 					>
 						<SegmentGroup.Indicator />
 						<SegmentGroup.Items
@@ -185,6 +223,7 @@ function App() {
 						setFontColor(e.value);
 					}}
 					w="full"
+					disabled={sending}
 				>
 					<ColorPicker.HiddenInput />
 					<ColorPicker.Label>フォントカラー</ColorPicker.Label>
@@ -201,7 +240,7 @@ function App() {
 				</ColorPicker.Root>
 
 				{/* 送信テキスト入力フィールド */}
-				<Field.Root>
+				<Field.Root disabled={sending}>
 					<Field.Label>送信テキスト</Field.Label>
 					<Textarea
 						size="lg"
@@ -216,30 +255,35 @@ function App() {
 					<Field.HelperText alignSelf="end">{text.length}/20</Field.HelperText>
 				</Field.Root>
 
-				{/* 送信ボタン */}
-				<Button
-					loading={loading || generating}
-					onClick={handleSend}
-					alignSelf="end"
-				>
-					送信
-					<MdSend />
-				</Button>
+				<HStack w="full" justifyContent="end">
+					{/* 送信ボタン */}
+					<Button
+						onClick={handleSend}
+						loading={sending || generating}
+						loadingText="送信中"
+						spinnerPlacement="end"
+						w="96px"
+						alignSelf="end"
+					>
+						送信
+						<MdSend />
+					</Button>
+				</HStack>
 
 				{/* 生成したキャンバス */}
 				<VStack w="full">
-					<Heading>送信イメージのプレビュー</Heading>
+					<Heading>送信イメージのプレビュー ({canvasList.length}Frame)</Heading>
+					<Wrap w="full" justifyContent="center">
+						{canvasList.map((canvas, index) => (
+							<Image
+								src={canvas.toDataURL()}
+								// biome-ignore lint/suspicious/noArrayIndexKey: 順番が変化しないため
+								key={index}
+								w="80px"
+							/>
+						))}
+					</Wrap>
 				</VStack>
-				<Wrap w="full" justifyContent="center">
-					{canvasList.map((canvas, index) => (
-						<Image
-							src={canvas.toDataURL()}
-							// biome-ignore lint/suspicious/noArrayIndexKey: 順番が変化しないため
-							key={index}
-							w="80px"
-						/>
-					))}
-				</Wrap>
 			</VStack>
 		</>
 	);
