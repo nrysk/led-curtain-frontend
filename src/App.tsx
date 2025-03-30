@@ -14,6 +14,7 @@ import {
 	IconButton,
 	Image,
 	Input,
+	NumberInput,
 	Portal,
 	Progress,
 	SegmentGroup,
@@ -39,6 +40,7 @@ function App() {
 	const [ipAddress, setIpAddress] = useIpAddress();
 	const [presetId, setPresetId] = useState<string | null>("1");
 	const [fontColor, setFontColor] = useState(parseColor("#f00"));
+	const [interval, setInterval] = useState("1");
 	const [text, setText] = useState("");
 	// 出力の状態
 	const [canvasList, setCanvasList] = useState<HTMLCanvasElement[]>([]);
@@ -104,6 +106,7 @@ function App() {
 			method: "POST",
 			body: JSON.stringify({
 				totalFrames: canvasList.length,
+				interval: Number(interval) * 1000,
 			}),
 		});
 
@@ -238,6 +241,22 @@ function App() {
 						</ColorPicker.Content>
 					</ColorPicker.Positioner>
 				</ColorPicker.Root>
+
+				<Field.Root disabled={sending}>
+					<Field.Label>フレーム間隔 (秒)</Field.Label>
+					<NumberInput.Root
+						value={interval}
+						onValueChange={(e) => {
+							setInterval(e.value);
+						}}
+						min={0.1}
+						max={10}
+						step={0.1}
+					>
+						<NumberInput.Control />
+						<NumberInput.Input />
+					</NumberInput.Root>
+				</Field.Root>
 
 				{/* 送信テキスト入力フィールド */}
 				<Field.Root disabled={sending}>
