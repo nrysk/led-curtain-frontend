@@ -9,7 +9,7 @@ if (!root) throw new Error("No root element");
 createRoot(root).render(
 	<StrictMode>
 		<Provider>
-			<Router>
+			<Router basename={import.meta.env.BASE_URL}>
 				<Routes>
 					<Route path="/" element={<App />} />
 				</Routes>

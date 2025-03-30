@@ -3,7 +3,6 @@ import {
 	Button,
 	Center,
 	CloseButton,
-	type Color,
 	ColorPicker,
 	ColorPickerChannelSlider,
 	Dialog,
@@ -27,6 +26,8 @@ import { useEffect, useState } from "react";
 import { MdMenu, MdSend } from "react-icons/md";
 import { useSearchParams } from "react-router";
 import { ColorModeButton } from "./components/ui/color-mode";
+import { InfoTip } from "./components/ui/toggle-tip";
+import { canvasToBlob, textToCanvas } from "./utils";
 
 const imageSize = 20;
 const maxTextLength = 20;
@@ -40,6 +41,7 @@ function App() {
 	const [ipAddress, setIpAddress] = useIpAddress();
 	const [presetId, setPresetId] = useState<string | null>("1");
 	const [fontColor, setFontColor] = useState(parseColor("#f00"));
+	const [bgColor, setBgColor] = useState(parseColor("#000"));
 	const [interval, setInterval] = useState("1");
 	const [text, setText] = useState("");
 	// 出力の状態
@@ -49,11 +51,11 @@ function App() {
 	useEffect(() => {
 		setGenerating(true);
 		const newCanvasList = text.split("").map((char) => {
-			return textToCanvas(char, fontColor, imageSize, imageSize);
+			return textToCanvas(char, fontColor, bgColor, imageSize, imageSize);
 		});
 		setCanvasList(newCanvasList);
 		setGenerating(false);
-	}, [text, fontColor]);
+	}, [text, fontColor, bgColor]);
 
 	// キャンバスを Blob に変換・送信
 	const handleSend = async () => {
@@ -145,8 +147,9 @@ function App() {
 				as="header"
 				position="sticky"
 				zIndex="sticky"
-				px="4"
-				py="1"
+				h="50px"
+				px="4px"
+				py="1px"
 				shadow="md"
 			>
 				<HStack w="full" maxW="600px" justifyContent="space-between">
@@ -156,7 +159,11 @@ function App() {
 						{/* ダイアログ表示ボタン */}
 						<Dialog.Root>
 							<Dialog.Trigger asChild>
-								<IconButton variant="ghost" size="xl">
+								<IconButton
+									variant="ghost"
+									size="sm"
+									css={{ _icon: { w: "5", h: "5" } }}
+								>
 									<MdMenu />
 								</IconButton>
 							</Dialog.Trigger>
@@ -242,6 +249,33 @@ function App() {
 					</ColorPicker.Positioner>
 				</ColorPicker.Root>
 
+				{/* 背景用カラーピッカー */}
+				<ColorPicker.Root
+					value={bgColor}
+					onValueChange={(e) => {
+						setBgColor(e.value);
+					}}
+					w="full"
+					disabled={sending}
+				>
+					<ColorPicker.HiddenInput />
+					<ColorPicker.Label>
+						背景カラー
+						<InfoTip content="電圧の関係で，背景色は暗くしてください" />
+					</ColorPicker.Label>
+					<ColorPicker.Control>
+						<ColorPicker.Input />
+						<ColorPicker.Trigger />
+					</ColorPicker.Control>
+					<ColorPicker.Positioner>
+						<ColorPicker.Content>
+							<ColorPicker.Area />
+							<ColorPickerChannelSlider channel="hue" />
+						</ColorPicker.Content>
+					</ColorPicker.Positioner>
+				</ColorPicker.Root>
+
+				{/* フレーム間隔指定フィールド */}
 				<Field.Root disabled={sending}>
 					<Field.Label>フレーム間隔 (秒)</Field.Label>
 					<NumberInput.Root
@@ -249,9 +283,9 @@ function App() {
 						onValueChange={(e) => {
 							setInterval(e.value);
 						}}
-						min={0.1}
+						min={0.2}
 						max={10}
-						step={0.1}
+						step={0.2}
 					>
 						<NumberInput.Control />
 						<NumberInput.Input />
@@ -309,36 +343,6 @@ function App() {
 }
 
 export default App;
-
-function textToCanvas(
-	text: string,
-	fontColor: Color,
-	imageWidth: number,
-	imageHeight: number,
-): HTMLCanvasElement {
-	const canvas = document.createElement("canvas");
-	canvas.width = imageWidth;
-	canvas.height = imageHeight;
-	const ctx = canvas.getContext("2d");
-	if (ctx) {
-		ctx.fillStyle = "black";
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
-		ctx.font = `${imageWidth - 2}px sans-serif`;
-		ctx.fillStyle = fontColor.toString("css");
-		ctx.textAlign = "center";
-		ctx.textBaseline = "middle";
-		ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-	}
-	return canvas;
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
-	return new Promise((resolve) => {
-		canvas.toBlob((blob) => {
-			resolve(blob);
-		});
-	});
-}
 
 function useIpAddress() {
 	const [searchParams, setSearchParams] = useSearchParams();
