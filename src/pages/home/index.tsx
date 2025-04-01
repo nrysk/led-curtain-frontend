@@ -1,14 +1,14 @@
 import { ColorModeButton } from "@/components/ui/color-mode";
 import { Toaster, toaster } from "@/components/ui/toaster";
 import { InfoTip } from "@/components/ui/toggle-tip";
-import { canvasToBlob, textToCanvas } from "@/utils";
+import { canvasToBlob, fileToCanvas, textToCanvas } from "@/utils";
 import {
 	Accordion,
 	Button,
-	Card,
 	Center,
-	Collapsible,
 	Field,
+	FileUpload,
+	Float,
 	HStack,
 	Heading,
 	Image,
@@ -21,16 +21,23 @@ import {
 	VStack,
 	Wrap,
 	parseColor,
+	useFileUpload,
 } from "@chakra-ui/react";
-import { useEffect, useRef, useState } from "react";
-import { MdImage, MdSend, MdTextFields } from "react-icons/md";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	MdClose,
+	MdImage,
+	MdSend,
+	MdTextFields,
+	MdUpload,
+} from "react-icons/md";
 import ColorPickerField from "./components/ColorPickerField";
 import ProgressActionBar from "./components/ProgressActionBar";
 import SettingsDialogButton from "./components/SettingsButton";
 import useIpAddress from "./hooks/useIpAddress";
 
 const imageSize = 20;
-const maxTextLength = 20;
+const maxImageCount = 20;
 
 const Home = () => {
 	// 処理の状態
@@ -46,22 +53,39 @@ const Home = () => {
 	const [interval, setInterval] = useState("1");
 	const [loopCount, setLoopCount] = useState("1");
 	const [text, setText] = useState("");
+	const fileUpload = useFileUpload({
+		accept: "image/*",
+		maxFiles: maxImageCount,
+	});
 	// 出力の状態
-	const [canvasList, setCanvasList] = useState<HTMLCanvasElement[]>([]);
+	const [previewCanvasList, setPreviewCanvasList] = useState<
+		HTMLCanvasElement[]
+	>([]);
+	const imageLength = useMemo(() => {
+		switch (tabValue) {
+			case "text":
+				return text.length;
+			case "image":
+				return fileUpload.acceptedFiles.length;
+			default:
+				return 0;
+		}
+	}, [tabValue, text, fileUpload.acceptedFiles]);
 	// 参照
 	const abortController = useRef<AbortController | null>(null);
 
-	// テキスト変更時にキャンバスを生成
+	// テキスト・イメージ変更時にキャンバスを生成
 	useEffect(() => {
 		setGenerating(true);
-		const newCanvasList = text.split("").map((char) => {
+		let newCanvasList: HTMLCanvasElement[] = [];
+		newCanvasList = text.split("").map((char) => {
 			return textToCanvas(char, fontColor, bgColor, imageSize, imageSize);
 		});
-		setCanvasList(newCanvasList);
+		setPreviewCanvasList(newCanvasList);
 		setGenerating(false);
 	}, [text, fontColor, bgColor]);
 
-	// キャンバスを Blob に変換・送信
+	// イメージ送信ハンドラ
 	const handleSend = async () => {
 		// 例外処理
 		if (generating || sending) {
@@ -74,9 +98,15 @@ const Home = () => {
 			return;
 		}
 
-		if (!text) {
+		if (tabValue === "text" && !text) {
 			toaster.warning({
 				title: "テキストを入力してください",
+			});
+			return;
+		}
+		if (tabValue === "image" && fileUpload.acceptedFiles.length === 0) {
+			toaster.warning({
+				title: "イメージを選択してください",
 			});
 			return;
 		}
@@ -85,6 +115,21 @@ const Home = () => {
 		setSendedCount(0);
 		// canvas 一つずつを Blob に変換して送信
 		abortController.current = new AbortController();
+		let canvasList: HTMLCanvasElement[] = [];
+		switch (tabValue) {
+			case "text":
+				canvasList = previewCanvasList;
+				break;
+			case "image":
+				canvasList = await Promise.all(
+					fileUpload.acceptedFiles.map((file) => {
+						return fileToCanvas(file, imageSize, imageSize);
+					}),
+				);
+				break;
+		}
+		console.log(canvasList);
+
 		for (const i in canvasList) {
 			const blob = await canvasToBlob(canvasList[i]);
 			if (!blob) {
@@ -132,7 +177,7 @@ const Home = () => {
 		await fetch(`http://${ipAddress}/presets/${presetId}`, {
 			method: "POST",
 			body: JSON.stringify({
-				totalFrames: canvasList.length,
+				totalFrames: imageLength,
 				interval: Number(interval) * 1000,
 				loopCount: Number(loopCount),
 			}),
@@ -154,7 +199,7 @@ const Home = () => {
 			{/* プログレスバー */}
 			<ProgressActionBar
 				open={sending}
-				value={Math.floor((sendedCount / canvasList.length) * 100)}
+				value={Math.floor((sendedCount / imageLength) * 100)}
 				onCancel={() => {
 					if (abortController.current) {
 						abortController.current.abort();
@@ -278,7 +323,7 @@ const Home = () => {
 								size="lg"
 								value={text}
 								onChange={(e) => {
-									setText(e.target.value.trim().slice(0, maxTextLength));
+									setText(e.target.value.trim().slice(0, maxImageCount));
 								}}
 								placeholder="テキストを入力"
 								autoresize
@@ -288,6 +333,59 @@ const Home = () => {
 								{text.length}/20
 							</Field.HelperText>
 						</Field.Root>
+
+						{/* プレビュー */}
+						<Wrap w="full" justifyContent="center">
+							{previewCanvasList.map((canvas, index) => (
+								<Center
+									// biome-ignore lint/suspicious/noArrayIndexKey: 順番が変化しないため
+									key={index}
+									p="8px"
+									borderRadius="md"
+									borderWidth="1px"
+								>
+									<Image
+										src={canvas.toDataURL()}
+										boxSize="12"
+										htmlWidth="10px"
+									/>
+								</Center>
+							))}
+						</Wrap>
+					</Tabs.Content>
+
+					{/* イメージタブ */}
+					<Tabs.Content value="image" as={VStack} spaceY="4">
+						<FileUpload.RootProvider value={fileUpload}>
+							<FileUpload.HiddenInput />
+							<FileUpload.Trigger asChild>
+								<Button variant="outline" w="full" disabled={sending}>
+									<MdUpload /> イメージ選択 ({fileUpload.acceptedFiles.length}/
+									{maxImageCount})
+								</Button>
+							</FileUpload.Trigger>
+							<Wrap gap="2" justifyContent="center">
+								{fileUpload.acceptedFiles.map((file) => (
+									<FileUpload.Item
+										p="8px"
+										width="auto"
+										key={file.name}
+										file={file}
+										pos="relative"
+									>
+										<Float>
+											<FileUpload.ItemDeleteTrigger>
+												<MdClose />
+											</FileUpload.ItemDeleteTrigger>
+										</Float>
+										<FileUpload.ItemPreviewImage
+											boxSize="12"
+											objectFit="cover"
+										/>
+									</FileUpload.Item>
+								))}
+							</Wrap>
+						</FileUpload.RootProvider>
 					</Tabs.Content>
 				</Tabs.Root>
 
@@ -350,26 +448,6 @@ const Home = () => {
 					送信
 					<MdSend />
 				</Button>
-
-				{/* 生成したキャンバス */}
-
-				<Card.Root w="full">
-					<Card.Header>
-						<Card.Title>送信イメージ</Card.Title>
-					</Card.Header>
-					<Card.Body>
-						<Wrap w="full" justifyContent="center">
-							{canvasList.map((canvas, index) => (
-								<Image
-									src={canvas.toDataURL()}
-									// biome-ignore lint/suspicious/noArrayIndexKey: 順番が変化しないため
-									key={index}
-									w="80px"
-								/>
-							))}
-						</Wrap>
-					</Card.Body>
-				</Card.Root>
 			</VStack>
 		</>
 	);

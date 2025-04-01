@@ -23,6 +23,29 @@ export function textToCanvas(
 	return canvas;
 }
 
+export async function fileToCanvas(
+	file: File,
+	imageWidth: number,
+	imageHeight: number,
+): Promise<HTMLCanvasElement> {
+	return new Promise((resolve) => {
+		const canvas = document.createElement("canvas");
+		canvas.width = imageWidth;
+		canvas.height = imageHeight;
+		const ctx = canvas.getContext("2d");
+		if (ctx) {
+			const image = new Image();
+			image.src = URL.createObjectURL(file);
+			image.onload = () => {
+				ctx.drawImage(image, 0, 0, imageWidth, imageHeight);
+				resolve(canvas);
+			};
+		} else {
+			resolve(canvas);
+		}
+	});
+}
+
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
 	return new Promise((resolve) => {
 		canvas.toBlob((blob) => {
