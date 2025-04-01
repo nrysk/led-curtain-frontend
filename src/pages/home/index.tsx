@@ -6,19 +6,12 @@ import {
 	Button,
 	Card,
 	Center,
-	ColorPicker,
-	ColorPickerChannelSlider,
-	Dialog,
-	Drawer,
 	Field,
 	HStack,
 	Heading,
-	IconButton,
 	Image,
 	Input,
 	NumberInput,
-	Portal,
-	Progress,
 	SegmentGroup,
 	Textarea,
 	VStack,
@@ -26,7 +19,7 @@ import {
 	parseColor,
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
-import { MdMenu, MdSend } from "react-icons/md";
+import { MdSend } from "react-icons/md";
 import ColorPickerField from "./ColorPickerField";
 import ProgressActionBar from "./ProgressActionBar";
 import SettingsDialogButton from "./SettingsButton";
@@ -46,6 +39,7 @@ const Home = () => {
 	const [fontColor, setFontColor] = useState(parseColor("#f00"));
 	const [bgColor, setBgColor] = useState(parseColor("#000"));
 	const [interval, setInterval] = useState("1");
+	const [loopCount, setLoopCount] = useState("1");
 	const [text, setText] = useState("");
 	// 出力の状態
 	const [canvasList, setCanvasList] = useState<HTMLCanvasElement[]>([]);
@@ -111,6 +105,7 @@ const Home = () => {
 			body: JSON.stringify({
 				totalFrames: canvasList.length,
 				interval: Number(interval) * 1000,
+				loopCount: Number(loopCount),
 			}),
 		});
 
@@ -229,6 +224,23 @@ const Home = () => {
 						min={0.2}
 						max={10}
 						step={0.2}
+					>
+						<NumberInput.Control />
+						<NumberInput.Input />
+					</NumberInput.Root>
+				</Field.Root>
+
+				{/* ループ回数指定フィールド */}
+				<Field.Root disabled={sending}>
+					<Field.Label>ループ回数</Field.Label>
+					<NumberInput.Root
+						value={loopCount}
+						onValueChange={(e) => {
+							setLoopCount(e.value);
+						}}
+						min={1}
+						max={20}
+						step={1}
 					>
 						<NumberInput.Control />
 						<NumberInput.Input />
